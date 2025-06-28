@@ -196,6 +196,7 @@ cython_debug/
 # Exclude some files
 data_generation_analysis.md
 DA_CapstoneProcessGuidelines_January2025Cohort.md
+project_plan_submission.md
 
 # Exclude the data directory
 data/

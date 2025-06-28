@@ -1,5 +1,49 @@
 # Credit Card Transactions Analysis
 
+A comprehensive synthetic credit card transaction dataset for fraud detection research and analysis, containing 4.7+ million transactions across 1,010 customers spanning 5+ years (2020-2025).
+
+## Setup Instructions
+
+### Option 1: Using UV (Recommended - Faster)
+
+**First, install UV if you don't have it:**
+```bash
+pip install uv
+```
+
+```bash
+# Clone the repository
+git clone https://github.com/lcabrp/card_transactions_analysis.git
+cd card_transactions_analysis
+
+# Install dependencies (uses pyproject.toml and uv.lock)
+uv sync
+```
+
+### Option 2: Using pip (Traditional)
+
+```bash
+# Clone the repository
+git clone https://github.com/lcabrp/card_transactions_analysis.git
+cd card_transactions_analysis
+
+# Create and activate virtual environment
+python -m venv .venv
+.venv\Scripts\activate  # Windows
+# source .venv/bin/activate  # macOS/Linux
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+### Dependencies
+
+- pandas - Data manipulation and analysis
+- numpy - Numerical computing
+- matplotlib - Basic plotting and visualization
+- seaborn - Statistical data visualization
+- ipykernel - Jupyter kernel for notebook environments
+
 ## Dataset Creation Process
 
 This dataset was created using a modified version of the [Sparkov Data Generation](https://github.com/lcabrp/Sparkov_Data_Generation) tool, which generates synthetic credit card transaction data for fraud detection research and testing.
@@ -40,33 +84,44 @@ python cleanup_empty_csvs.py -d '|' output_folder
 #### 3. Data Organization
 Copied the remaining CSV files to the `data/` folder for analysis and version control.
 
-### Dataset Overview
-
-The generation process produced a comprehensive dataset with:
-- **Multiple CSV files** containing transaction data organized by demographic profiles
-- **1,010 customers** across 12 different demographic segments
-- **5+ years of transaction history** (2020-2025)
-- **Realistic fraud patterns** integrated into the data
-- **Geographic distribution** across the United States
-- **Modern transaction categories** including traditional and contemporary spending patterns
-
-### File Structure
-
-```
-data/
-├── customers.csv                           # Customer demographics and profile assignments
-├── adults_2550_female_urban_0000-0201.csv  # Transaction files organized by:
-├── adults_2550_male_urban_0404-0605.csv    #   - Demographic profile
-├── adults_50up_female_rural_0202-0403.csv  #   - Data chunks
-├── young_adults_male_urban_0606-0807.csv   #   - Time periods
-└── ...                                     # Additional transaction files
-```
-
 ### Source Repository
 
 **Modified Sparkov Data Generation Tool:** https://github.com/lcabrp/Sparkov_Data_Generation
 
 This fork provides enhanced data generation capabilities with improved normalization and modern transaction patterns compared to the original implementation.
+
+## Project Objective
+
+### Credit Card Transaction Insights and Fraud Pattern Analysis
+
+**Main Problem to Solve:**
+Analyze credit card transaction data to uncover key spending patterns and identify characteristics that distinguish fraudulent from legitimate transactions.
+
+**Core Research Questions:**
+
+1. **Customer Spending Patterns**
+   - How do average transaction amounts vary across customer demographic profiles?
+   - Which customer segments generate the highest transaction volumes?
+
+2. **Transaction Timing Analysis**
+   - What are the peak transaction hours and days of the week?
+   - Are there temporal patterns that correlate with fraud occurrence?
+
+3. **Fraud vs. Legitimate Transaction Characteristics**
+   - How do transaction amounts and merchant distances differ between fraudulent and legitimate transactions?
+   - What geographic patterns exist in fraudulent transactions?
+
+4. **Transaction Category and Geographic Analysis**
+   - Which transaction categories are most common across different regions?
+   - How does customer location relate to merchant location patterns?
+
+**Expected Deliverables:**
+- Comprehensive data analysis with multiple visualizations
+- Data-driven insights about customer behavior and fraud patterns
+- Recommendations for transaction monitoring based on findings
+
+**Why This Approach:**
+This objective leverages the dataset's rich demographic and transaction data while focusing on exploratory data analysis and business insights.
 
 ## Data Dictionary
 
@@ -89,7 +144,7 @@ This fork provides enhanced data generation capabilities with improved normaliza
 - **acct_num**: Account Number - Customer's account number
 - **profile**: Customer Profile - Demographic profile assignment
 
-### Transaction Data (54 transaction files)
+### Transaction Data (53 transaction files)
 
 - **ssn**: Social Security Number - Links to customer data
 - **trans_num**: Transaction Number - Unique transaction identifier
@@ -118,61 +173,19 @@ This fork provides enhanced data generation capabilities with improved normaliza
 
 ```
 card_transactions_analysis/
-├── data/                           # Generated transaction data
-├── data_generation_analysis.md     # Analysis of data generation logic
-├── data_dictionary_and_summary.ipynb  # EDA notebook for project plan
-├── README.md                       # This file
-├── requirements.txt                # Python dependencies
-└── ...                            # Additional analysis notebooks (to be added)
+├── data/                               # Generated transaction data
+│   ├── customers.csv                   # Customer demographics and profiles
+│   ├── adults_2550_female_urban_*.csv  # Transaction files organized by:
+│   ├── adults_2550_male_urban_*.csv    #   - Demographic profile
+│   ├── adults_50up_female_rural_*.csv  #   - Data chunks
+│   └── young_adults_male_urban_*.csv   #   - Time periods
+├── data_generation_analysis.md         # Analysis of data generation logic
+├── data_dictionary_and_summary.ipynb   # EDA notebook for project plan
+├── README.md                           # This file
+├── requirements.txt                    # Python dependencies (pip compatibility)
+├── pyproject.toml                      # UV dependencies (modern approach)
+└── ...                                 # Additional analysis notebooks (to be added)
 ```
-
-## Setup Instructions
-
-### Option 1: Using UV (Recommended - Faster)
-
-**First, install UV if you don't have it:**
-```bash
-pip install uv
-```
-
-```bash
-# Clone the repository
-git clone https://github.com/lcabrp/card_transactions_analysis.git
-cd card_transactions_analysis
-
-# Install dependencies (uses pyproject.toml and uv.lock)
-uv sync
-
-# Start Jupyter notebook
-jupyter notebook
-```
-
-### Option 2: Using pip (Traditional)
-
-```bash
-# Clone the repository
-git clone https://github.com/lcabrp/card_transactions_analysis.git
-cd card_transactions_analysis
-
-# Create and activate virtual environment
-python -m venv .venv
-.venv\Scripts\activate  # Windows
-# source .venv/bin/activate  # macOS/Linux
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Start Jupyter notebook
-jupyter notebook
-```
-
-### Dependencies
-
-- pandas - Data manipulation and analysis
-- numpy - Numerical computing
-- matplotlib - Basic plotting and visualization
-- seaborn - Statistical data visualization
-- jupyter - Interactive notebook environment
 
 ## Suggested Next Steps
 
