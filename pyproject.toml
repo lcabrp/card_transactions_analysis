@@ -1,0 +1,13 @@
+[project]
+name = "card-transactions-analysis"
+version = "0.1.0"
+description = "Credit Card transactions analysis for fraud detection and customer segmentation."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "jupyter>=1.1.1",
+    "matplotlib>=3.10.3",
+    "numpy>=2.3.1",
+    "pandas>=2.3.0",
+    "seaborn>=0.13.2",
+]

@@ -68,15 +68,111 @@ data/
 
 This fork provides enhanced data generation capabilities with improved normalization and modern transaction patterns compared to the original implementation.
 
+## Data Dictionary
+
+### Customer Data (customers.csv)
+
+- **ssn**: Social Security Number - Unique customer identifier
+- **cc_num**: Credit Card Number - Customer's credit card number
+- **first**: First Name - Customer's first name
+- **last**: Last Name - Customer's last name
+- **gender**: Gender - Customer's gender (M/F)
+- **street**: Street Address - Customer's street address
+- **city**: City - Customer's city of residence
+- **state**: State - Customer's state of residence
+- **zip**: ZIP Code - Customer's postal code
+- **lat**: Latitude - Geographic latitude of customer address
+- **long**: Longitude - Geographic longitude of customer address
+- **city_pop**: City Population - Population of customer's city
+- **job**: Job Title - Customer's occupation
+- **dob**: Date of Birth - Customer's birth date
+- **acct_num**: Account Number - Customer's account number
+- **profile**: Customer Profile - Demographic profile assignment
+
+### Transaction Data (54 transaction files)
+
+- **ssn**: Social Security Number - Links to customer data
+- **trans_num**: Transaction Number - Unique transaction identifier
+- **trans_date**: Transaction Date - Date of transaction
+- **trans_time**: Transaction Time - Time of transaction
+- **category**: Transaction Category - Type of purchase/transaction
+- **amt**: Amount - Transaction amount in USD
+- **is_fraud**: Fraud Flag - Binary indicator (0=legitimate, 1=fraudulent)
+- **merchant**: Merchant Name - Name of the merchant/business
+- **merch_lat**: Merchant Latitude - Geographic latitude of merchant
+- **merch_long**: Merchant Longitude - Geographic longitude of merchant
+
+## Data Summary
+
+- **Total Customers**: 1,010
+- **Total Transaction Files**: 53
+- **Total Transactions**: 4,740,009
+- **Date Range**: 2020-2025 (5+ years of data)
+- **Geographic Coverage**: Nationwide (United States)
+- **Fraud Rate**: ~1% (realistic fraud detection scenario)
+- **Data Quality**: No missing values detected
+- **File Format**: CSV with pipe (|) delimiter
+- **Total Dataset Size**: ~639 MB
+
 ## Project Structure
 
 ```
 card_transactions_analysis/
-├── data/                    # Generated transaction data
-├── data_generation_analysis.md  # Analysis of data generation logic
-├── README.md               # This file
-└── ...                     # Analysis notebooks and scripts (to be added)
+├── data/                           # Generated transaction data
+├── data_generation_analysis.md     # Analysis of data generation logic
+├── data_dictionary_and_summary.ipynb  # EDA notebook for project plan
+├── README.md                       # This file
+├── requirements.txt                # Python dependencies
+└── ...                            # Additional analysis notebooks (to be added)
 ```
+
+## Setup Instructions
+
+### Option 1: Using UV (Recommended - Faster)
+
+**First, install UV if you don't have it:**
+```bash
+pip install uv
+```
+
+```bash
+# Clone the repository
+git clone https://github.com/lcabrp/card_transactions_analysis.git
+cd card_transactions_analysis
+
+# Install dependencies (uses pyproject.toml and uv.lock)
+uv sync
+
+# Start Jupyter notebook
+jupyter notebook
+```
+
+### Option 2: Using pip (Traditional)
+
+```bash
+# Clone the repository
+git clone https://github.com/lcabrp/card_transactions_analysis.git
+cd card_transactions_analysis
+
+# Create and activate virtual environment
+python -m venv .venv
+.venv\Scripts\activate  # Windows
+# source .venv/bin/activate  # macOS/Linux
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Start Jupyter notebook
+jupyter notebook
+```
+
+### Dependencies
+
+- pandas - Data manipulation and analysis
+- numpy - Numerical computing
+- matplotlib - Basic plotting and visualization
+- seaborn - Statistical data visualization
+- jupyter - Interactive notebook environment
 
 ## Suggested Next Steps
 
