@@ -17,7 +17,7 @@ git clone https://github.com/lcabrp/card_transactions_analysis.git
 cd card_transactions_analysis
 
 # Install dependencies (uses pyproject.toml and uv.lock)
-uv sync
+uv sync or python -m uv sync
 ```
 
 ### Option 2: Using pip (Traditional)
