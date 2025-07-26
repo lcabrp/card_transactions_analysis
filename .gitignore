@@ -197,4 +197,8 @@ cython_debug/
 data_generation_analysis.md
 DA_CapstoneProcessGuidelines_January2025Cohort.md
 project_plan_submission.md
+DA_CapstoneGuidelines_Jan2025.md
+
+# Exclude the database
+fraud_detection.db
 
