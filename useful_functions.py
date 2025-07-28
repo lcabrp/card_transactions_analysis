@@ -1,48 +1,60 @@
+
 # useful_functions.py
 from pathlib import Path
 import pandas as pd
+import glob
 import sqlite3
 
-# Create database with proper indexes
-def create_fraud_detection_db(customers_df: pd.DataFrame, transactions_df: pd.DataFrame)-> None:
-    conn = sqlite3.connect('fraud_detection.db')
+def get_files_dir(directory_path: str, file_mask: str = '*.csv') -> list:
+    """
+    Get all files matching the pattern in a directory.
+
+    Args:
+        directory_path: Path to the directory containing files
+        file_mask: File pattern to match (default: '*.csv')
+
+    Returns:
+        list: List of file paths matching the pattern
+    """
+    # Ensure directory path ends with separator
+    if not directory_path.endswith(('/', '\\')):
+        directory_path += '/'
     
-    # Table 1: Customers (SSN as primary key)
-    customers_df.to_sql('customers', conn, if_exists='replace', index=False)
+    # Check if directory exists
+    if not Path(directory_path).exists():
+        raise ValueError(f"Directory not found: {directory_path}")
     
-    # Table 2: Transactions (trans_num as primary key, ssn as foreign key)
-    transactions_df.to_sql('transactions', conn, if_exists='replace', index=False)
-    
-    # Create indexes for performance
-    conn.execute('CREATE INDEX IF NOT EXISTS idx_customers_ssn ON customers(ssn)')
-    conn.execute('CREATE INDEX IF NOT EXISTS idx_transactions_ssn ON transactions(ssn)')
-    conn.execute('CREATE INDEX IF NOT EXISTS idx_transactions_trans_num ON transactions(trans_num)')
-    conn.execute('CREATE INDEX IF NOT EXISTS idx_transactions_unix_time ON transactions(unix_time)')
-    conn.execute('CREATE INDEX IF NOT EXISTS idx_transactions_is_fraud ON transactions(is_fraud)')
-    
-    conn.close()
-    print("Database created successfully with indexes")
+    # Build the search pattern and get files
+    pattern = directory_path + file_mask
+    files = glob.glob(pattern)
+
+    return files
 
 def get_safe_int_type(series: pd.Series) -> str:
     """Determine the smallest safe integer type for a series"""
+
+    if type(series) != pd.Series:
+        raise TypeError("Expected a pandas Series")
+
     min_val = series.min()
     max_val = series.max()
-    
+
+    # Check ranges for different integer types
     if min_val >= 0:  # Unsigned types
-        if max_val <= 255:  # 2^8 - 1
+        if max_val <= 255:
             return 'uint8'
-        elif max_val <= 65535: # 2^16 - 1
+        elif max_val <= 65535:
             return 'uint16'
-        elif max_val <= 4294967295: # 2^32 - 1
+        elif max_val <= 4294967295:
             return 'uint32'
         else:
             return 'uint64'
-    else:  # Signed types needed
-        if min_val >= -128 and max_val <= 127: # 2^7 - 1
+    else:  # Signed types
+        if min_val >= -128 and max_val <= 127:
             return 'int8'
-        elif min_val >= -32768 and max_val <= 32767: # 2^15 - 1
+        elif min_val >= -32768 and max_val <= 32767:
             return 'int16'
-        elif min_val >= -2147483648 and max_val <= 2147483647: # 2^31 - 1
+        elif min_val >= -2147483648 and max_val <= 2147483647:
             return 'int32'
         else:
             return 'int64'
@@ -51,6 +63,9 @@ def show_df_info(df: pd.DataFrame) -> None:
     """
     Display information about a DataFrame including the top few rows, column names, shape, and data types.
     """
+    if type(df) != pd.DataFrame:
+        raise TypeError("Expected a pandas DataFrame")
+    
     print("\nFirst few rows of the DataFrame:")
     print(df.head(5))
     print("\nDataFrame columns:")
@@ -63,52 +78,120 @@ def optimize_df_types(df: pd.DataFrame, df_types: dict) -> pd.DataFrame:
     """
     Optimize memory usage of DataFrame based on provided types
     The expected dictionary should have data types as keys, and a list of the columns that need to be converted to that type.
-    Example:
-    {
-        'category': ['col1', 'col2'],
-        'string': ['col3'],
-        'uint16': ['col4', 'col5'],
-        'float32': ['col6', 'col7']
-    }
-    """
-    # Check if df_types is provided
-    if df_types is None:
-        return df  # Return the original DataFrame if no types are provided
 
-    # Create a copy of the DataFrame to avoid modifying the original
+    Example: {'type': ['col1', 'col2'] }
+    """
+    if df_types is None:
+        return df
+
     df_optimized = df.copy()
-    
-    # Apply the specified data types
+    df_columns = df_optimized.columns
+
     for dtype, columns in df_types.items():
         for col in columns:
-            if col in df_optimized.columns:  # Safety check
+            if col in df_columns:
                 df_optimized[col] = df_optimized[col].astype(dtype)
             else:
                 print(f"Warning: Column '{col}' not found in DataFrame")
     
     return df_optimized
 
+def get_missing_values(df: pd.DataFrame) -> pd.Series:
+    """Get the number of missing values in each column of a DataFrame"""
+    if type(df) != pd.DataFrame:
+        raise TypeError("Expected a pandas DataFrame")
+    return df.isnull().sum()
 
-def get_files_in_directory(directory_path, file_mask='*.csv', recursive=False) -> list:
+def check_primary_key_candidates(df: pd.DataFrame, columns: list) -> dict:
     """
-    Get all files (.csv by default) in a directory.
-    
+    Check if specified columns can serve as primary keys (unique, non-null).
+
     Args:
-        directory_path: Path to the directory
-        file_mask: File pattern to match(default: '*.csv')
-        recursive: If True, process subdirectories recursively
-        
+        df: DataFrame to check
+        columns: List of column names to evaluate as primary key candidates
+
     Returns:
-        list: List of file paths
-    """   
+        dict: Results for each column with uniqueness and null information
+    """
+    # Input validation
+    if type(df) != pd.DataFrame:
+        raise TypeError("Expected a pandas DataFrame")
+    if type(columns) != list:
+        raise TypeError("Expected a list of column names")
+    if not all(isinstance(col, str) for col in columns):
+        raise TypeError("Column names must be strings")
     
-    pattern = '**/' + file_mask if recursive else file_mask
-    file_list = [str(path) for path in Path(directory_path).rglob(pattern)]
-    
-    if not file_list:
-        print(f"No files found in {directory_path} matching pattern '{file_mask}'")
-    
-    return file_list
+    results = {}
+    df_columns = df.columns
+    # Check each column
+    for col in columns:
+        if col not in df_columns:
+            results[col] = {
+                'status': 'COLUMN_NOT_FOUND',
+                'unique_count': 0,
+                'total_count': 0,
+                'null_count': 0,
+                'duplicate_count': 0,
+                'sample_duplicates': {}
+            }
+            continue
+
+        total_count = len(df)
+        unique_count = df[col].nunique()
+        null_count = df[col].isnull().sum()
+        duplicate_count = total_count - unique_count
+
+        # Determine if it can be a primary key
+        if null_count > 0:
+            status = 'HAS_NULLS'
+        elif duplicate_count > 0:
+            status = 'HAS_DUPLICATES'
+        else:
+            status = 'VALID_PRIMARY_KEY'
+
+        # Get sample duplicates if there are any (and not too many)
+        # https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.Series.duplicated.html#pandas.Series.duplicated
+        sample_duplicates = {}
+        if status == 'HAS_DUPLICATES' and duplicate_count <= 10:
+            duplicates = df[df[col].duplicated(keep=False)][col].value_counts().head(5) # Get the top 5 duplicates
+            sample_duplicates = duplicates.to_dict()
+
+        results[col] = {
+            'status': status,
+            'unique_count': unique_count,
+            'total_count': total_count,
+            'null_count': null_count,
+            'duplicate_count': duplicate_count,
+            'sample_duplicates': sample_duplicates
+        }
+
+    return results
+
+def display_primary_key_analysis(pk_results: dict) -> None:
+    """
+    Display detailed primary key analysis results.
+
+    Args:
+        pk_results: Results from check_primary_key_candidates function
+    """
+    for col, result in pk_results.items():
+        if result['status'] == 'COLUMN_NOT_FOUND':
+            print(f"\nPrimary Key Analysis for '{col}':")
+            print(f"  Column not found in DataFrame")
+            continue
+
+        print(f"\nPrimary Key Analysis for '{col}':")
+        print(f"  Total rows: {result['total_count']:,}")
+        print(f"  Unique values: {result['unique_count']:,}")
+        print(f"  Null values: {result['null_count']:,}")
+        print(f"  Duplicate values: {result['duplicate_count']:,}")
+        print(f"  Status: {result['status']}")
+
+        # Show sample duplicates if available
+        if result['sample_duplicates']:
+            print(f"  Sample duplicates:")
+            for value, count in result['sample_duplicates'].items():
+                print(f"    '{value}': appears {count} times")
 
 def process_and_merge_files(file_list: list, optimization_types: dict, delimiter: str = '|') -> pd.DataFrame:
     """
@@ -142,15 +225,89 @@ def process_and_merge_files(file_list: list, optimization_types: dict, delimiter
     print("Merging all optimized files...")
     merged_df = pd.concat(optimized_chunks, ignore_index=True)
     
-    # Cleanup
+    # Cleanup to free up memory
     del optimized_chunks
     import gc
     gc.collect()
     
-    print(f"Final merged dataset: {merged_df.shape}")
-    merged_df.info(memory_usage='deep')
-    
-    return merged_df
+    return merged_df     
+
+def create_fraud_detection_db(customers_df: pd.DataFrame, transactions_df: pd.DataFrame) -> None:
+    """
+    Create fraud detection database with proper primary keys and foreign keys.
+
+    Args:
+        customers_df: Customer DataFrame
+        transactions_df: Transaction DataFrame
+    """
+    conn = sqlite3.connect('fraud_detection.db')
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute('PRAGMA foreign_keys = OFF')
+        cursor.execute('DROP TABLE IF EXISTS transactions')
+        cursor.execute('DROP TABLE IF EXISTS customers')
+        cursor.execute('''
+            CREATE TABLE customers (
+                ssn TEXT PRIMARY KEY,
+                cc_num TEXT,
+                first TEXT,
+                last TEXT,
+                gender TEXT,
+                street TEXT,
+                city TEXT,
+                state TEXT,
+                zip TEXT,
+                lat REAL,
+                long REAL,
+                city_pop INTEGER,
+                job TEXT,
+                dob TEXT,
+                acct_num TEXT,
+                pop_group TEXT,
+                location TEXT
+            )
+        ''')
+
+
+        cursor.execute('''
+            CREATE TABLE transactions (
+                trans_num TEXT PRIMARY KEY,
+                ssn TEXT,
+                trans_date TEXT,
+                trans_time TEXT,
+                unix_time INTEGER,
+                category TEXT,
+                amt REAL,
+                is_fraud INTEGER,
+                merchant TEXT,
+                merch_lat REAL,
+                merch_long REAL,
+                FOREIGN KEY (ssn) REFERENCES customers (ssn)
+            )
+        ''')
+
+        customers_df.to_sql('customers', conn, if_exists='append', index=False)
+        transactions_df.to_sql('transactions', conn, if_exists='append', index=False)
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_transactions_ssn ON transactions(ssn)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_transactions_unix_time ON transactions(unix_time)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_transactions_is_fraud ON transactions(is_fraud)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_transactions_category ON transactions(category)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_customers_state ON customers(state)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_customers_pop_group ON customers(pop_group)')
+
+        cursor.execute('PRAGMA foreign_keys = ON')
+
+        conn.commit()
+        print("Database created successfully with proper primary keys, foreign keys, and indexes")
+
+    except Exception as e:
+        print(f"Error creating database: {e}")
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
 
 if __name__ == "__main__":
 
