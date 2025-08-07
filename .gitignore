@@ -193,9 +193,6 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 
-# Exclude some files
-DA_CapstoneProcessGuidelines_January2025Cohort.md
-
 # Exclude the database
 fraud_detection.db
 

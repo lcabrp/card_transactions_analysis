@@ -4,6 +4,10 @@ from pathlib import Path
 import pandas as pd
 import glob
 import sqlite3
+import numpy as np
+from typing import Union, List, Dict, Any
+import gc
+import sys
 
 def get_files_dir(directory_path: str, file_mask: str = '*.csv') -> list:
     """
@@ -308,6 +312,45 @@ def create_fraud_detection_db(customers_df: pd.DataFrame, transactions_df: pd.Da
     finally:
         conn.close()
 
+
+def calculate_distance(lat1: Union[float, pd.Series, np.ndarray],
+                      lon1: Union[float, pd.Series, np.ndarray],
+                      lat2: Union[float, pd.Series, np.ndarray],
+                      lon2: Union[float, pd.Series, np.ndarray]) -> Union[float, np.ndarray]:
+    """
+    Calculate the great circle distance between two points on Earth using the Haversine formula.
+
+    Args:
+        lat1: Latitude of first point(s) in decimal degrees (float, Series, or array)
+        lon1: Longitude of first point(s) in decimal degrees (float, Series, or array)
+        lat2: Latitude of second point(s) in decimal degrees (float, Series, or array)
+        lon2: Longitude of second point(s) in decimal degrees (float, Series, or array)
+
+    Returns:
+        Distance between the points in kilometers (float if inputs are scalars, array if inputs are Series/arrays)
+
+    Example:
+        >>> distance = calculate_distance(40.7128, -74.0060, 34.0522, -118.2437)
+        >>> print(f"Distance: {distance:.2f} km")
+        Distance: 3944.42 km
+    """
+
+    # Convert to numpy arrays to handle both Series and individual values
+    lat1, lon1, lat2, lon2 = map(np.asarray, [lat1, lon1, lat2, lon2])
+    
+    # Convert decimal degrees to radians
+    lat1, lon1, lat2, lon2 = map(np.radians, [lat1, lon1, lat2, lon2])
+
+    # Haversine formula
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+    a = np.sin(dlat/2)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon/2)**2
+    c = 2 * np.arcsin(np.sqrt(a))
+
+    # Earth's radius in kilometers
+    earth_radius_km = 6371
+
+    return c * earth_radius_km
 
 if __name__ == "__main__":
 
