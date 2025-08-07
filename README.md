@@ -1,6 +1,6 @@
 # Credit Card Transactions Analysis
 
-A comprehensive analysis of synthetic credit card transaction data to identify fraud patterns and customer spending behaviors. This project analyzes 4.7+ million transactions across 1,010 customers spanning 5+ years (2020-2025).
+A comprehensive analysis of synthetic credit card transaction data to identify fraud patterns and customer spending behaviors. This project analyzes 4.74 million transactions across 1,010 customers spanning 5+ years (2020-2025).
 
 ## Project Summary
 
@@ -8,11 +8,11 @@ A comprehensive analysis of synthetic credit card transaction data to identify f
 Credit card fraud costs billions annually and affects millions of consumers. Understanding transaction patterns and identifying characteristics that distinguish fraudulent from legitimate transactions is crucial for financial institutions to protect customers and minimize losses.
 
 ### Key Findings
-Our analysis of 4.7 million transactions revealed several important patterns:
+Our analysis of 4.74 million transactions revealed several important patterns:
 
 **Fraud Detection Insights:**
 - Fraud rates vary significantly by time of day, with certain hours showing higher risk
-- Geographic distance between customer and merchant location serves as a fraud indicator
+- Analysis of customer-merchant distances shows no significant correlation with fraud occurrence
 - Specific transaction categories exhibit higher fraud rates than others
 - Weekend vs. weekday patterns show distinct fraud characteristics
 
@@ -23,7 +23,7 @@ Our analysis of 4.7 million transactions revealed several important patterns:
 
 **Geographic Insights:**
 - Customer distribution spans all US states with concentration in major metropolitan areas
-- Transaction distances provide valuable fraud detection signals
+- Geographic distance analysis reveals fraud occurs equally across all distance ranges (0.199%-0.207%)
 - Urban vs. rural customers show different spending behaviors
 
 ### Data Limitations
@@ -199,7 +199,7 @@ This objective leverages the dataset's rich demographic and transaction data whi
 - **Total Transactions**: 4,740,009
 - **Date Range**: 2020-2025 (5+ years of data)
 - **Geographic Coverage**: Nationwide (United States)
-- **Fraud Rate**: ~1% (realistic fraud detection scenario)
+- **Fraud Rate**: ~0.2% (realistic fraud detection scenario)
 - **Data Quality**: No missing values detected
 - **File Format**: CSV with pipe (|) delimiter
 - **Total Dataset Size**: ~639 MB
@@ -232,13 +232,13 @@ This project includes comprehensive analysis of credit card transaction patterns
 
 ### Key Findings
 - **Fraud Patterns**: Fraud rate varies by time of day and transaction category, with certain merchant categories showing higher risk
-- **Geographic Insights**: Transaction distances between customers and merchants provide fraud detection signals
+- **Geographic Insights**: Distance analysis shows fraud rates remain consistent (0.199%-0.207%) across all customer-merchant distance ranges
 - **Customer Demographics**: Analysis reveals spending patterns across different population groups and locations
 - **Temporal Patterns**: Clear patterns in transaction volume and fraud rates by hour and day of week
 
 ### Technical Implementation
 - **SQL Joins**: Used INNER JOIN between customers and transactions tables to retrieve analysis data
-- **Custom Functions**: Implemented 9+ reusable functions with proper type hints and documentation
+- **Custom Functions**: Implemented 10 reusable functions with proper type hints and documentation
 - **Visualizations**: Created multiple plot types (bar charts, scatter plots, line plots, stacked charts) with consistent styling
 
 ## Future Analysis Opportunities
