@@ -5,9 +5,8 @@ import pandas as pd
 import glob
 import sqlite3
 import numpy as np
-from typing import Union, List, Dict, Any
-import gc
-import sys
+from typing import Union, Optional, Dict, List
+import numbers
 
 def get_files_dir(directory_path: str, file_mask: str = '*.csv') -> list:
     """
@@ -34,6 +33,303 @@ def get_files_dir(directory_path: str, file_mask: str = '*.csv') -> list:
 
     return files
 
+def show_df_info(df: pd.DataFrame) -> None:
+    """
+    Display information about a DataFrame including the top few rows, column names, shape, and data types.
+    """
+    if type(df) != pd.DataFrame:
+        raise TypeError("Expected a pandas DataFrame")
+    
+    print("\nFirst few rows of the DataFrame:")
+    print(df.head(5))
+    print("\nDataFrame columns:")
+    print(list(df.columns))  # Print column names
+    print(f"\nDataFrame shape: {df.shape}")  # Print shape
+    print("\nDataFrame info:")
+    print(df.info(memory_usage='deep'))  # Print info with deep memory usage
+
+# https://stackoverflow.com/questions/57856010/automatically-optimizing-pandas-dtypes
+
+# The following four functions are based on the above link
+def optimize_types(dataframe):
+    np_types = [np.int8 ,np.int16 ,np.int32, np.int64,
+           np.uint8 ,np.uint16, np.uint32, np.uint64]
+    np_types = [np_type.__name__ for np_type in np_types]
+    type_df = pd.DataFrame(data=np_types, columns=['class_type'])
+    type_df['min_value'] = type_df['class_type'].apply(lambda row: np.iinfo(row).min)
+    type_df['max_value'] = type_df['class_type'].apply(lambda row: np.iinfo(row).max)
+    type_df['range'] = type_df['max_value'] - type_df['min_value']
+    type_df.sort_values(by='range', inplace=True)
+
+    for col in dataframe.loc[:, dataframe.dtypes <= np.integer]:
+        col_min = dataframe[col].min()
+        col_max = dataframe[col].max()
+        temp = type_df[(type_df['min_value'] <= col_min) & (type_df['max_value'] >= col_max)]
+        optimized_class = temp.loc[temp['range'].idxmin(), 'class_type']
+        print("Col name : {} Col min_value : {} Col max_value : {} Optimized Class : {}".format(col, col_min, col_max, optimized_class))
+        dataframe[col] = dataframe[col].astype(optimized_class)
+    return dataframe
+
+def auto_opt_pd_dtypes(df_: pd.DataFrame, inplace=False) -> Optional[pd.DataFrame]:
+    """ Automatically downcast Number dtypes for minimal possible,
+        will not touch other (datetime, str, object, etc)
+        
+        :param df_: dataframe
+        :param inplace: if False, will return a copy of input dataset
+        
+        :return: `None` if `inplace=True` or dataframe if `inplace=False`
+    """
+    df = df_ if inplace else df_.copy()
+        
+    for col in df.columns:
+        # integers
+        if issubclass(df[col].dtypes.type, numbers.Integral):
+            # unsigned integers
+            if df[col].min() >= 0:
+                df[col] = pd.to_numeric(df[col], downcast='unsigned')
+            # signed integers
+            else:
+                df[col] = pd.to_numeric(df[col], downcast='integer')
+        # other real numbers
+        elif issubclass(df[col].dtypes.type, numbers.Real):
+            df[col] = pd.to_numeric(df[col], downcast='float')
+    
+    if not inplace:
+        return df
+
+def get_types(signed=True, unsigned=True, custom=[]):
+    '''Returns a pandas dataframe containing the boundaries of each integer dtype'''
+    # based on https://stackoverflow.com/a/57894540/9419492
+    pd_types = custom
+    if signed:
+        pd_types += [pd.Int8Dtype() ,pd.Int16Dtype() ,pd.Int32Dtype(), pd.Int64Dtype()]
+    if unsigned:
+        pd_types += [pd.UInt8Dtype() ,pd.UInt16Dtype(), pd.UInt32Dtype(), pd.UInt64Dtype()]
+    type_df = pd.DataFrame(data=pd_types, columns=['pd_type'])
+    type_df['np_type'] = type_df['pd_type'].apply(lambda t: t.numpy_dtype)
+    type_df['min_value'] = type_df['np_type'].apply(lambda row: np.iinfo(row).min)
+    type_df['max_value'] = type_df['np_type'].apply(lambda row: np.iinfo(row).max)
+    type_df['allow_negatives'] = type_df['min_value'] < 0
+    type_df['size'] = type_df['np_type'].apply(lambda row: row.itemsize)
+    type_df.sort_values(by=['size', 'allow_negatives'], inplace=True)
+    return type_df.reset_index(drop=True)
+
+def downcast_int(file_path, column:str, chunksize=100000, delimiter=',', signed=True, unsigned=True):
+    '''Automatically downcast Number dtype for minimal possible'''
+    types = get_types(signed, unsigned)
+    negatives = False
+    for chunk in pd.read_csv(file_path, usecols=[column],delimiter=delimiter,chunksize=chunksize):
+        M = chunk[column].max()
+        m = chunk[column].min()
+        if not signed and not negatives and m < 0 :
+            types = types[types['allow_negatives']] # removes unsigned rows
+            negatives = True
+        if m < types['min_value'].iloc[0]:
+            types = types[types['min_value'] < m]
+        if M > types['max_value'].iloc[0]:
+            types = types[types['max_value'] > M]
+        if len(types) == 1:
+            print('early stop')
+            break
+    return types['pd_type'].iloc[0]
+
+# End of functions based on the above link
+
+# The follwing function is AI generated
+def analyze_dataframe_for_optimization(
+    df: pd.DataFrame,
+    cat_threshold: float = 0.00001,          # Fraction of unique values vs n_rows to auto-categorize
+    cat_max_unique: int = 75,             # Or absolute unique values for category suggestion
+    downcast_float: bool = True,          # Whether to try float64 → float32
+    require_all_float_notnull: bool = True, # Only downcast floats if all notnull (avoids infs/NANs mishaps)
+    verbose: bool = False                 # Print suggestions as you go
+) -> Dict[str, List[str]]:
+    """
+    Analyze a DataFrame and suggest optimized dtypes per column.
+    Designed for auditability and flexible application via optimize_df_types.
+
+    Returns a dictionary mapping dtype string → list of column names.
+    """
+    type_map: Dict[str, List[str]] = {}
+    n_rows = len(df)
+
+    for col in df.columns:
+        s = df[col]
+        orig_dtype = s.dtype
+
+        # =================== INTEGER COLUMNS ==========================
+        if pd.api.types.is_integer_dtype(orig_dtype):
+            min_val, max_val = s.min(), s.max()
+            has_na = s.isnull().any()
+
+            # For nullable ints, use pandas extension dtypes (Int64, UInt32, etc)
+            if has_na:
+                # Pandas nullable dtypes require pandas >= 1.0
+                # Choose signed or unsigned
+                if min_val >= 0:
+                    for dtype in ['UInt8', 'UInt16', 'UInt32', 'UInt64']:
+                        # Use numpy's iinfo on raw dtype (strip capital 'U')
+                        if max_val <= np.iinfo(dtype[1:].lower()).max:
+                            rec = dtype
+                            break
+                    else:
+                        rec = 'UInt64'
+                else:
+                    for dtype in ['Int8', 'Int16', 'Int32', 'Int64']:
+                        if min_val >= np.iinfo(dtype[1:].lower()).min and max_val <= np.iinfo(dtype[1:].lower()).max:
+                            rec = dtype
+                            break
+                    else:
+                        rec = 'Int64'
+            else:
+                # No NA, can use numpy int types
+                if min_val >= 0:
+                    if max_val <= np.iinfo(np.uint8).max:
+                        rec = 'uint8'
+                    elif max_val <= np.iinfo(np.uint16).max:
+                        rec = 'uint16'
+                    elif max_val <= np.iinfo(np.uint32).max:
+                        rec = 'uint32'
+                    else:
+                        rec = 'uint64'
+                else:
+                    if min_val >= np.iinfo(np.int8).min and max_val <= np.iinfo(np.int8).max:
+                        rec = 'int8'
+                    elif min_val >= np.iinfo(np.int16).min and max_val <= np.iinfo(np.int16).max:
+                        rec = 'int16'
+                    elif min_val >= np.iinfo(np.int32).min and max_val <= np.iinfo(np.int32).max:
+                        rec = 'int32'
+                    else:
+                        rec = 'int64'
+            type_map.setdefault(rec, []).append(col)
+            if verbose:
+                print(f"[{col}] Integer: min={min_val} max={max_val} "
+                      f"nulls={has_na} → {rec}")
+
+        # =================== FLOAT COLUMNS ============================
+        elif pd.api.types.is_float_dtype(orig_dtype):
+            rec = 'float64' # Default is keep as-is
+            cur_min, cur_max = s.min(), s.max()
+
+            if downcast_float:
+                # Downcast safely if all notnull or if user allows
+                if (not require_all_float_notnull) or s.notnull().all():
+                    # Check if values fit in float32 range
+                    if cur_min >= np.finfo(np.float32).min and cur_max <= np.finfo(np.float32).max:
+                        rec = 'float32'
+            type_map.setdefault(rec, []).append(col)
+            if verbose:
+                print(f"[{col}] Float: min={cur_min} max={cur_max} "
+                      f"→ {rec}")
+
+        # =================== OBJECT/STRING COLUMNS ====================
+        elif orig_dtype == 'object':
+            n_unique = s.nunique(dropna=False)
+            # Use inferred type to help distinguish string-like columns from others (ignore mixed types here)
+            # Suggest 'category' if cardinality below threshold, else 'string'
+            if (n_unique <= cat_max_unique) or (n_unique / n_rows <= cat_threshold):
+                rec = 'category'
+            else:
+                rec = 'string'
+            type_map.setdefault(rec, []).append(col)
+            if verbose:
+                print(f"[{col}] Object: unique={n_unique} rows={n_rows} "
+                      f"frac={n_unique/n_rows:.3f} → {rec}")
+
+        # =================== BOOL COLUMNS =============================
+        elif pd.api.types.is_bool_dtype(orig_dtype):
+            # Already optimal
+            continue
+
+        # =================== DATETIME COLUMNS ==========================
+        elif pd.api.types.is_datetime64_any_dtype(orig_dtype):
+            # Leave as-is (already compact and speedy)
+            continue
+
+        # =================== OTHER TYPES ===============================
+        else:
+            # Extend as needed for timedelta, sparse, etc.
+            if verbose:
+                print(f"[{col}] dtype {orig_dtype} not handled for optimization (left as is)")
+
+    return type_map
+
+def df_memory_usage(df: pd.DataFrame) -> pd.Series:
+    """
+    Returns Series: memory usage (bytes) per column, with a 'Total' sum at the end.
+    """
+    mem = df.memory_usage(deep=True)
+    mem['Total'] = mem.sum()
+    return mem
+
+def print_optimization_report(
+    before_df: pd.DataFrame, 
+    after_df: pd.DataFrame, 
+    mapping: dict,
+    show_missing: bool = True
+):
+    """
+    Print a detailed before/after optimization report, including:
+    - Per-column memory usage changes
+    - Per-column dtype changes
+    - Overall memory footprint change
+    - Missing value counts (optional)
+    - Type/column assignment summary
+
+    Args:
+        before_df: DataFrame before optimization
+        after_df:  DataFrame after optimization
+        mapping:   Dict mapping dtype → list of columns converted
+        show_missing: Whether to display missing value counts before optimization
+    """
+    print("="*55)
+    print("DataFrame Memory Usage Optimization Report")
+    print("="*55)
+
+    # --- (1) Memory usage per column ---
+    before_mem = df_memory_usage(before_df)
+    after_mem = df_memory_usage(after_df)
+    mem_diff = before_mem - after_mem
+
+    # --- (2) Type info ---
+    # Get dtypes for "Total" row; use "" instead of dtype for "Total"
+    before_dtypes = pd.concat([before_df.dtypes.astype(str), pd.Series({'Total': ""})])
+    after_dtypes = pd.concat([after_df.dtypes.astype(str), pd.Series({'Total': ""})])
+
+    mem_df = pd.DataFrame({
+        "Before (bytes)": before_mem,
+        "After (bytes)": after_mem,
+        "Delta (bytes)": mem_diff,
+        "Before dtype": before_dtypes,
+        "After dtype": after_dtypes,
+    })
+
+    print("\n---- Per-column memory usage and dtype ----")
+    print(mem_df)
+
+    # --- (3) Overall % and total KB saved ---
+    percent_decrease = 100 * (mem_diff['Total'] / before_mem['Total']) if before_mem['Total'] > 0 else 0
+    print("\n--> Overall memory decreased by {0:.2f}%: {1:,} → {2:,} bytes ({3:,.0f} KB saved).\n"
+          .format(percent_decrease, int(before_mem['Total']), int(after_mem['Total']), mem_diff['Total']/1024))
+
+    # --- (4) Missing values report ---
+    if show_missing:
+        print("---- Missing Values (before optimization) ----")
+        print(before_df.isnull().sum(), "\n")
+
+    # --- (5) Type conversion summary ---
+    print("---- Type conversions applied ----")
+    for dtype, cols in mapping.items():
+        for col in cols:
+            before = before_df[col].dtype if col in before_df.columns else "N/A"
+            after = after_df[col].dtype if col in after_df.columns else "N/A"
+            print(f"{col:<25}: {before}  →  {dtype} (now: {after})")
+
+    print("="*55 + "\n")
+    print("Optimization report completed successfully.\n")
+# End of AI generated functions
+
+# Custom made function to determine the smallest safe integer type for a pandas Series
 def get_safe_int_type(series: pd.Series) -> str:
     """Determine the smallest safe integer type for a series"""
 
@@ -62,21 +358,6 @@ def get_safe_int_type(series: pd.Series) -> str:
             return 'int32'
         else:
             return 'int64'
-
-def show_df_info(df: pd.DataFrame) -> None:
-    """
-    Display information about a DataFrame including the top few rows, column names, shape, and data types.
-    """
-    if type(df) != pd.DataFrame:
-        raise TypeError("Expected a pandas DataFrame")
-    
-    print("\nFirst few rows of the DataFrame:")
-    print(df.head(5))
-    print("\nDataFrame columns:")
-    print(list(df.columns))  # Print column names
-    print(f"\nDataFrame shape: {df.shape}")  # Print shape
-    print("\nDataFrame info:")
-    print(df.info(memory_usage='deep'))  # Print info with deep memory usage
 
 def optimize_df_types(df: pd.DataFrame, df_types: dict) -> pd.DataFrame:
     """
