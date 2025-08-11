@@ -1,0 +1,1 @@
+python -m ipykernel install --user --name rapids-25.08 --display-name "RAPIDS 25.08 (Py 3.13)"
