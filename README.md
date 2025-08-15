@@ -79,6 +79,100 @@ pip install -r requirements.txt
 - **sqlite3** - Database operations for data storage and SQL joins
 - **ipykernel** - Jupyter kernel for notebook environments
 
+
+## GPU Acceleration with RAPIDS (Optional)
+
+This project runs entirely on CPU by default. Both notebooks (01_data_transf.ipynb and 02_analysis.ipynb) currently start with the cudf.pandas accelerator magic to use the GPU when available:
+
+- If you have a CUDA-capable GPU and installed RAPIDS, keep the line at the very top of the notebook:
+  - %load_ext cudf.pandas
+- If you are running without CUDA/GPU, comment out or remove that line; everything will run on CPU with pandas.
+
+### Why this matters
+- cudf.pandas accelerates many pandas operations on the GPU with zero code changes.
+- Some plotting libraries (plotly, seaborn/matplotlib) expect CPU pandas/NumPy arrays. When the accelerator is enabled, convert data to plain pandas right before plotting to avoid type errors.
+
+### WSL2 + Conda (recommended)
+
+RAPIDS provides a conda metapackage that installs cuDF and matching CUDA libs. On WSL2:
+
+```bash
+conda create -n rapids-25.08 -c rapidsai -c conda-forge -c nvidia \
+  "rapids=25.08" "python=3.13" "cuda-version>=12.0,<=12.9"
+conda activate rapids-25.08
+# Optional: register a Jupyter kernel for the new env
+conda install -c conda-forge ipykernel
+python -m ipykernel install --user --name rapids-25.08 --display-name "RAPIDS 25.08 (Py 3.13)"
+```
+
+Switch the notebook kernel to "RAPIDS 25.08 (Py 3.13)" (Kernel → Change Kernel) before running.
+
+### pip wheels (alternative)
+
+RAPIDS also publishes CUDA 12 wheels to PyPI (via NVIDIA index). Example:
+
+```bash
+pip install \
+  --extra-index-url=https://pypi.nvidia.com \
+  "cudf-cu12==25.8.*" "dask-cudf-cu12==25.8.*" "cuml-cu12==25.8.*" \
+  "cugraph-cu12==25.8.*" "nx-cugraph-cu12==25.8.*" "cuxfilter-cu12==25.8.*" \
+  "cucim-cu12==25.8.*" "pylibraft-cu12==25.8.*" "raft-dask-cu12==25.8.*" \
+  "cuvs-cu12==25.8.*"
+```
+
+See the official install guide for conda/pip/docker options and compatibility: https://docs.rapids.ai/install/
+
+### Enabling/Disabling the accelerator
+
+- Notebooks: add/remove at the very top
+  - %load_ext cudf.pandas
+- Python scripts:
+  - Enable at runtime: python -m cudf.pandas your_script.py
+  - Or programmatically before importing pandas:
+    - from cudf.pandas import install; install()
+  - To run on CPU only, do not enable the accelerator.
+
+### Plotting with seaborn/plotly while using cudf.pandas
+
+Convert to plain pandas right before plotting to avoid GPU-backed proxy dtypes:
+<small>Example helper (place near the top of the notebook):</small>
+
+<augment_code_snippet path="README.md" mode="EXCERPT">
+````python
+import pandas as pd
+
+def to_plain_pandas(df, cols):
+    sub = df[cols]
+    try:
+        from pandas.api.interchange import from_dataframe
+        return from_dataframe(sub)
+    except Exception:
+        pass
+    return sub.to_pandas() if hasattr(sub, "to_pandas") else pd.DataFrame(sub)
+````
+</augment_code_snippet>
+
+Use it to feed plotting libraries CPU data:
+
+<augment_code_snippet path="README.md" mode="EXCERPT">
+````python
+plot_df = to_plain_pandas(df, ["lat","long","state"]).copy()
+plot_df["lat"] = pd.to_numeric(plot_df["lat"], errors="coerce")
+plot_df["long"] = pd.to_numeric(plot_df["long"], errors="coerce")
+````
+</augment_code_snippet>
+
+### Tip: Colab
+
+Google Colab offers easy access to a GPU runtime. You can install RAPIDS wheels with the pip command above in a Colab cell and run the notebooks there. Remember to keep %load_ext cudf.pandas at the top if you want GPU acceleration.
+
+### Quick troubleshooting
+- Ensure the notebook is using the correct kernel:
+  - import sys; print(sys.executable)
+- Verify GPU visibility inside WSL2:
+  - nvidia-smi
+- If a plot raises errors about __array__/cupy types, convert to plain pandas (helper above) or pass NumPy arrays (e.g., series.to_numpy()).
+
 ## Dataset Creation Process
 
 This dataset was created using a modified version of the [Sparkov Data Generation](https://github.com/lcabrp/Sparkov_Data_Generation) tool, which generates synthetic credit card transaction data for fraud detection research and testing.

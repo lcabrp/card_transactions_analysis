@@ -8,6 +8,48 @@ import numpy as np
 from typing import Union, Optional, Dict, List
 import numbers
 
+# Helper to convert GPU-accelerated (cuDF/cudf.pandas) DataFrame slices to plain pandas
+# so that plotting libraries (seaborn/plotly) that expect CPU/NumPy arrays work reliably.
+# It tries multiple safe conversion paths and falls back to a robust constructor.
+
+def to_plain_pandas(df: pd.DataFrame, cols: list) -> pd.DataFrame:
+    """
+    Return a real pandas.DataFrame with only the selected columns, even if the
+    input is a cuDF DataFrame or a cudf.pandas-accelerated pandas object.
+
+    Strategy (in order):
+    1) Pandas interchange API (from_dataframe) when available
+    2) cuDF -> pandas via .to_pandas()
+    3) Generic pandas.DataFrame(dict(...)) fallback (robust, but slower)
+
+    This is useful right before plotting or calling libraries that expect pure
+    pandas/NumPy types (seaborn, plotly, scikit-learn without cuML backends).
+
+    Args:
+        df: Source DataFrame (pandas or cuDF-backed via cudf.pandas)
+        cols: List of column names to extract
+
+    Returns:
+        pandas.DataFrame: A copy/slice containing the requested columns, with
+        CPU-backed dtypes.
+    """
+    sub = df[cols]
+    # Try pandas interchange API (works with cuDF >= 23.x and pandas >= 2.2)
+    try:
+        from pandas.api.interchange import from_dataframe
+        pd_df = from_dataframe(sub)
+        return pd_df
+    except Exception:
+        pass
+    # Try cuDF's native conversion when available
+    if hasattr(sub, "to_pandas"):
+        try:
+            return sub.to_pandas()
+        except Exception:
+            pass
+    # Robust fallback: construct from Python lists (fine for moderate-sized plots)
+    return pd.DataFrame({c: [v for v in sub[c]] for c in cols})
+
 def get_files_dir(directory_path: str, file_mask: str = '*.csv') -> list:
     """
     Get all files matching the pattern in a directory.
@@ -22,11 +64,11 @@ def get_files_dir(directory_path: str, file_mask: str = '*.csv') -> list:
     # Ensure directory path ends with separator
     if not directory_path.endswith(('/', '\\')):
         directory_path += '/'
-    
+
     # Check if directory exists
     if not Path(directory_path).exists():
         raise ValueError(f"Directory not found: {directory_path}")
-    
+
     # Build the search pattern and get files
     pattern = directory_path + file_mask
     files = glob.glob(pattern)
@@ -39,7 +81,7 @@ def show_df_info(df: pd.DataFrame) -> None:
     """
     if type(df) != pd.DataFrame:
         raise TypeError("Expected a pandas DataFrame")
-    
+
     print("\nFirst few rows of the DataFrame:")
     print(df.head(5))
     print("\nDataFrame columns:")
@@ -73,14 +115,14 @@ def optimize_types(dataframe):
 def auto_opt_pd_dtypes(df_: pd.DataFrame, inplace=False) -> Optional[pd.DataFrame]:
     """ Automatically downcast Number dtypes for minimal possible,
         will not touch other (datetime, str, object, etc)
-        
+
         :param df_: dataframe
         :param inplace: if False, will return a copy of input dataset
-        
+
         :return: `None` if `inplace=True` or dataframe if `inplace=False`
     """
     df = df_ if inplace else df_.copy()
-        
+
     for col in df.columns:
         # integers
         if issubclass(df[col].dtypes.type, numbers.Integral):
@@ -93,7 +135,7 @@ def auto_opt_pd_dtypes(df_: pd.DataFrame, inplace=False) -> Optional[pd.DataFram
         # other real numbers
         elif issubclass(df[col].dtypes.type, numbers.Real):
             df[col] = pd.to_numeric(df[col], downcast='float')
-    
+
     if not inplace:
         return df
 
@@ -263,8 +305,8 @@ def df_memory_usage(df: pd.DataFrame) -> pd.Series:
     return mem
 
 def print_optimization_report(
-    before_df: pd.DataFrame, 
-    after_df: pd.DataFrame, 
+    before_df: pd.DataFrame,
+    after_df: pd.DataFrame,
     mapping: dict,
     show_missing: bool = True
 ):
@@ -378,7 +420,7 @@ def optimize_df_types(df: pd.DataFrame, df_types: dict) -> pd.DataFrame:
                 df_optimized[col] = df_optimized[col].astype(dtype)
             else:
                 print(f"Warning: Column '{col}' not found in DataFrame")
-    
+
     return df_optimized
 
 def get_missing_values(df: pd.DataFrame) -> pd.Series:
@@ -405,7 +447,7 @@ def check_primary_key_candidates(df: pd.DataFrame, columns: list) -> dict:
         raise TypeError("Expected a list of column names")
     if not all(isinstance(col, str) for col in columns):
         raise TypeError("Column names must be strings")
-    
+
     results = {}
     df_columns = df.columns
     # Check each column
@@ -481,41 +523,41 @@ def display_primary_key_analysis(pk_results: dict) -> None:
 def process_and_merge_files(file_list: list, optimization_types: dict, delimiter: str = '|') -> pd.DataFrame:
     """
     Process multiple CSV files by optimizing data types and merging them.
-    
+
     Args:
         file_list: List of file paths to process
         optimization_types: Dictionary with data types and columns to optimize
         delimiter: CSV delimiter (default: '|')
-    
+
     Returns:
         pd.DataFrame: Merged and optimized DataFrame
     """
     optimized_chunks = []
     total_rows = 0
-    
+
     for i, file_path in enumerate(file_list):
         print(f"Processing file {i+1}/{len(file_list)}: {file_path}")
-        
+
         # Load and optimize
         chunk_df = pd.read_csv(file_path, delimiter=delimiter)
         chunk_df = optimize_df_types(chunk_df, optimization_types)
-        
+
         optimized_chunks.append(chunk_df)
         total_rows += len(chunk_df)
-        
+
         if i % 10 == 0:  # Progress update every 10 files
             print(f"Processed {total_rows:,} rows so far...")
-    
+
     # Merge all chunks
     print("Merging all optimized files...")
     merged_df = pd.concat(optimized_chunks, ignore_index=True)
-    
+
     # Cleanup to free up memory
     del optimized_chunks
     import gc
     gc.collect()
-    
-    return merged_df     
+
+    return merged_df
 
 def create_fraud_detection_db(customers_df: pd.DataFrame, transactions_df: pd.DataFrame) -> None:
     """
@@ -618,7 +660,7 @@ def calculate_distance(lat1: Union[float, pd.Series, np.ndarray],
 
     # Convert to numpy arrays to handle both Series and individual values
     lat1, lon1, lat2, lon2 = map(np.asarray, [lat1, lon1, lat2, lon2])
-    
+
     # Convert decimal degrees to radians
     lat1, lon1, lat2, lon2 = map(np.radians, [lat1, lon1, lat2, lon2])
 
