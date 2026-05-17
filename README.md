@@ -175,7 +175,7 @@ Google Colab offers easy access to a GPU runtime. You can install RAPIDS wheels 
 
 ## Dataset Creation Process
 
-This dataset was created using a modified version of the [Sparkov Data Generation](https://github.com/lcabrp/Sparkov_Data_Generation) tool, which generates synthetic credit card transaction data for fraud detection research and testing.
+This dataset was created using a modified version of the [Sparkov Data Generation](https://github.com/lcabrp/Sparkov-Data-Generation) tool, which generates synthetic credit card transaction data for fraud detection research and testing.
 
 ### Key Improvements in Forked Repository
 
@@ -191,13 +191,13 @@ The forked repository includes specific enhancements to the original Sparkov imp
 Generated synthetic transaction data using the modified Sparkov tool:
 
 ```bash
-python datagen.py -n 1010 -o output_folder 01/01/2020 06/25/2025
+python datagen.py -n 1010 -o output_folder 01-01-2020 06-25-2025
 ```
 
 **Parameters:**
 - `-n 1010`: Generate data for 1,010 customers
 - `-o output_folder`: Output directory for generated files
-- `01/01/2020 06/25/2025`: Date range spanning 5+ years (January 1, 2020 to June 25, 2025)
+- `01-01-2020 06-25-2025`: Date range spanning 5+ years (January 1, 2020 to June 25, 2025). The generator expects `MM-DD-YYYY`; keep this format so future reruns match the parser.
 
 #### 2. Data Cleanup
 Removed empty CSV files created during the parallel generation process:
@@ -215,7 +215,7 @@ Copied the remaining CSV files to the `data/` folder for analysis and version co
 
 ### Source Repository
 
-**Modified Sparkov Data Generation Tool:** https://github.com/lcabrp/Sparkov_Data_Generation
+**Modified Sparkov Data Generation Tool:** https://github.com/lcabrp/Sparkov-Data-Generation
 
 This fork provides enhanced data generation capabilities with improved normalization and modern transaction patterns compared to the original implementation.
 

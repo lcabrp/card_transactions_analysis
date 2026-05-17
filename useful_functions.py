@@ -139,10 +139,12 @@ def auto_opt_pd_dtypes(df_: pd.DataFrame, inplace=False) -> Optional[pd.DataFram
     if not inplace:
         return df
 
-def get_types(signed=True, unsigned=True, custom=[]):
+def get_types(signed=True, unsigned=True, custom=None):
     '''Returns a pandas dataframe containing the boundaries of each integer dtype'''
     # based on https://stackoverflow.com/a/57894540/9419492
-    pd_types = custom
+    # Keep the caller-provided custom dtypes isolated. A mutable default list would
+    # leak changes between calls, which is painful to debug in notebook workflows.
+    pd_types = list(custom or [])
     if signed:
         pd_types += [pd.Int8Dtype() ,pd.Int16Dtype() ,pd.Int32Dtype(), pd.Int64Dtype()]
     if unsigned:
@@ -173,6 +175,8 @@ def downcast_int(file_path, column:str, chunksize=100000, delimiter=',', signed=
         if len(types) == 1:
             print('early stop')
             break
+    if types.empty:
+        raise ValueError(f"No safe integer dtype found for column '{column}'")
     return types['pd_type'].iloc[0]
 
 # End of functions based on the above link
@@ -209,16 +213,29 @@ def analyze_dataframe_for_optimization(
                 # Pandas nullable dtypes require pandas >= 1.0
                 # Choose signed or unsigned
                 if min_val >= 0:
-                    for dtype in ['UInt8', 'UInt16', 'UInt32', 'UInt64']:
-                        # Use numpy's iinfo on raw dtype (strip capital 'U')
-                        if max_val <= np.iinfo(dtype[1:].lower()).max:
+                    nullable_unsigned = [
+                        ('UInt8', np.uint8),
+                        ('UInt16', np.uint16),
+                        ('UInt32', np.uint32),
+                        ('UInt64', np.uint64),
+                    ]
+                    for dtype, np_dtype in nullable_unsigned:
+                        # Pandas nullable integers preserve missing values; the
+                        # paired NumPy dtype is used only for trustworthy bounds.
+                        if max_val <= np.iinfo(np_dtype).max:
                             rec = dtype
                             break
                     else:
                         rec = 'UInt64'
                 else:
-                    for dtype in ['Int8', 'Int16', 'Int32', 'Int64']:
-                        if min_val >= np.iinfo(dtype[1:].lower()).min and max_val <= np.iinfo(dtype[1:].lower()).max:
+                    nullable_signed = [
+                        ('Int8', np.int8),
+                        ('Int16', np.int16),
+                        ('Int32', np.int32),
+                        ('Int64', np.int64),
+                    ]
+                    for dtype, np_dtype in nullable_signed:
+                        if min_val >= np.iinfo(np_dtype).min and max_val <= np.iinfo(np_dtype).max:
                             rec = dtype
                             break
                     else:
@@ -269,14 +286,15 @@ def analyze_dataframe_for_optimization(
             n_unique = s.nunique(dropna=False)
             # Use inferred type to help distinguish string-like columns from others (ignore mixed types here)
             # Suggest 'category' if cardinality below threshold, else 'string'
-            if (n_unique <= cat_max_unique) or (n_unique / n_rows <= cat_threshold):
+            unique_fraction = n_unique / n_rows if n_rows else 0
+            if (n_unique <= cat_max_unique) or (unique_fraction <= cat_threshold):
                 rec = 'category'
             else:
                 rec = 'string'
             type_map.setdefault(rec, []).append(col)
             if verbose:
                 print(f"[{col}] Object: unique={n_unique} rows={n_rows} "
-                      f"frac={n_unique/n_rows:.3f} → {rec}")
+                      f"frac={unique_fraction:.3f} → {rec}")
 
         # =================== BOOL COLUMNS =============================
         elif pd.api.types.is_bool_dtype(orig_dtype):
@@ -532,6 +550,9 @@ def process_and_merge_files(file_list: list, optimization_types: dict, delimiter
     Returns:
         pd.DataFrame: Merged and optimized DataFrame
     """
+    if not file_list:
+        raise ValueError("file_list must contain at least one CSV file")
+
     optimized_chunks = []
     total_rows = 0
 
@@ -559,15 +580,50 @@ def process_and_merge_files(file_list: list, optimization_types: dict, delimiter
 
     return merged_df
 
-def create_fraud_detection_db(customers_df: pd.DataFrame, transactions_df: pd.DataFrame) -> None:
+def create_fraud_detection_db(
+    customers_df: pd.DataFrame,
+    transactions_df: pd.DataFrame,
+    db_path: Union[str, Path] = 'fraud_detection.db',
+) -> None:
     """
     Create fraud detection database with proper primary keys and foreign keys.
 
     Args:
         customers_df: Customer DataFrame
         transactions_df: Transaction DataFrame
+        db_path: Destination SQLite database path
     """
-    conn = sqlite3.connect('fraud_detection.db')
+    # The raw Sparkov customer export has `profile`; the cleaned notebook version
+    # may instead add `pop_group` and `location`. Normalize optional columns here
+    # so this helper works with either stage of the capstone workflow.
+    customers_to_load = customers_df.copy()
+    for optional_col in ['profile', 'pop_group', 'location']:
+        if optional_col not in customers_to_load.columns:
+            customers_to_load[optional_col] = None
+
+    transactions_to_load = transactions_df.copy()
+    for optional_col in ['merchant', 'merch_lat', 'merch_long']:
+        if optional_col not in transactions_to_load.columns:
+            transactions_to_load[optional_col] = None
+
+    customer_columns = [
+        'ssn', 'cc_num', 'first', 'last', 'gender', 'street', 'city', 'state',
+        'zip', 'lat', 'long', 'city_pop', 'job', 'dob', 'acct_num', 'profile',
+        'pop_group', 'location'
+    ]
+    transaction_columns = [
+        'trans_num', 'ssn', 'trans_date', 'trans_time', 'unix_time', 'category',
+        'amt', 'is_fraud', 'merchant', 'merch_lat', 'merch_long'
+    ]
+
+    missing_customer_columns = [col for col in customer_columns if col not in customers_to_load.columns]
+    missing_transaction_columns = [col for col in transaction_columns if col not in transactions_to_load.columns]
+    if missing_customer_columns:
+        raise ValueError(f"customers_df is missing required columns: {missing_customer_columns}")
+    if missing_transaction_columns:
+        raise ValueError(f"transactions_df is missing required columns: {missing_transaction_columns}")
+
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
     try:
@@ -591,6 +647,7 @@ def create_fraud_detection_db(customers_df: pd.DataFrame, transactions_df: pd.Da
                 job TEXT,
                 dob TEXT,
                 acct_num TEXT,
+                profile TEXT,
                 pop_group TEXT,
                 location TEXT
             )
@@ -614,13 +671,14 @@ def create_fraud_detection_db(customers_df: pd.DataFrame, transactions_df: pd.Da
             )
         ''')
 
-        customers_df.to_sql('customers', conn, if_exists='append', index=False)
-        transactions_df.to_sql('transactions', conn, if_exists='append', index=False)
+        customers_to_load[customer_columns].to_sql('customers', conn, if_exists='append', index=False)
+        transactions_to_load[transaction_columns].to_sql('transactions', conn, if_exists='append', index=False)
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_transactions_ssn ON transactions(ssn)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_transactions_unix_time ON transactions(unix_time)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_transactions_is_fraud ON transactions(is_fraud)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_transactions_category ON transactions(category)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_customers_state ON customers(state)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_customers_profile ON customers(profile)')
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_customers_pop_group ON customers(pop_group)')
 
         cursor.execute('PRAGMA foreign_keys = ON')
